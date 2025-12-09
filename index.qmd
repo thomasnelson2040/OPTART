@@ -1,0 +1,595 @@
+---
+title: "OPTARTinR"
+author: "Nash"
+format: 
+  dashboard:
+    logo: www/smeargle.png
+    theme: slate
+server: shiny
+---
+
+<style>
+body {
+  background-image: url("www/background_slide.jpeg");
+  background-size: cover;
+}
+</style>
+
+```{r}
+library(magick)
+library(imager)
+library(pracma)
+library(image2data)
+library(png)
+library(ggplot2)
+library(reshape2)
+library(TSP)
+library(shinyWidgets)
+library(shiny)
+#setwd("~/Documents/website_project")
+```
+
+```{r}
+#| context: server
+# flower <- image_read("./picture1.png")
+# flower <- image_quantize(flower, colorspace = "gray")
+# flower <- image_data(flower)
+# flower <- matrix(flower, nrow = 2000, ncol = 3000)
+# 
+# flower <- image_read(flower, colorspace = "Gray")
+# print(flower)
+```
+
+```{r}
+#| context: server
+
+# flower <- load.image("./www/picture1.jpeg")
+# flower <- grayscale(flower)
+# flower <- as.matrix(flower, byrow = T)
+# flower <- fliplr(flower)
+
+#image(flower, col = gray.colors(33))
+
+```
+
+```{r}
+# pixel <- function(m, n){
+# 
+# flower <- load.image("./picture1.jpeg")
+# flower <- grayscale(flower)
+# flower <- as.matrix(flower, byrow = T)
+# #flower <- fliplr(flower)
+# #flower <- as.matrix(flower, byrow = T)
+# m = 8
+# n = 12
+# 
+# rows <- length(flower[ ,1])
+# columns <- length(flower[1, ])
+# 
+# sq <-  as.integer(columns / m)
+# 
+# count = 1
+# lst = c(1:(m*n))
+# for(i in seq(1, rows, sq)){
+#   for(j in seq(1, columns, sq)){
+#     lst[count] = sum(flower[i:(i + sq - 1), j:(j + sq - 1)]) / (sq * sq)
+#     count = count + 1
+# print(count)
+#   }
+# }
+# flower <- matrix(lst, nrow = m, ncol = n, byrow = T)
+# flower <- fliplr(flower)
+# 
+# image(flower, col = gray.colors(256), axes = F)
+# }
+```
+# Home
+
+```{r}
+#| context: server
+
+#setBackgroundImage(src = "www/background_slide.jpeg")
+```
+
+
+```{r}
+#![](www/background_slide.jpeg){.absolute top=200 width="100%" height="100%"}
+
+h1("This is the home page.")
+
+p("hello")
+```
+
+
+
+# Pixelize
+## Sidebar {.sidebar}
+
+```{r}
+#| component: input
+fileInput(
+  "image_upload_flower", ## This is the name of the imput. I call this when getting more info from the submission. 
+  "Pick an Image to pixelize", ## this is the title above the input button
+  accept = c('image/png', 'image/jpeg') ## this specifies the different file types that are accepted
+)
+  
+sliderInput("m", "Choose the number of rows", min = 1, max = 500, value = 12)
+  
+#sliderInput("n", "Choose the number of columns", min = 1, max = 500, value = 8)
+  
+downloadButton("download3")
+
+```
+
+## Column 1
+### Row 1
+```{r}
+  
+imageOutput("image_upload_flower", height = "100%", width = "100%")## This displays the original image and the height and width doesn't really matter. I was trying to get it to fill the full space, but it didn't work.
+  
+```
+## Column 2
+### Row 1
+```{r}
+#plotOutput("pixelplot")## this actually outputs the pixel plot
+  
+plotOutput("pixelplot")
+```
+
+```{r}
+#| context: server  
+  
+output$download3 <- downloadHandler(
+  #req(input$image_upload)
+  filename = "PixelImage.png",
+  content = function(file) {
+  ggsave(file, pixel(input$image_upload_flower$datapath, input$m))
+})
+
+
+```
+
+```{r}
+#| context: server
+
+output$image_upload_flower <- renderImage({
+  req(input$image_upload_flower) ## saying it need to wait for the submitting. Pretty sure.
+  list(src = input$image_upload_flower$datapath, contentType = input$image_upload_flower$type, width = "100%") ## this is what is stored from the renderImage function
+}, deleteFile = FALSE) ## this keeps the uploaded file around
+```
+
+```{r}
+#| context: server
+
+library(tidyverse)
+pixel <- function(flpath_flower, m = 8){
+  
+  flower <- load.image(flpath_flower)
+  flower <- grayscale(flower)
+  flower <- as.matrix(flower, byrow = T)
+  
+  (nr <- nrow(flower))
+  (nc <- ncol(flower))
+
+size <- dim(flower)
+
+if(size[1] < m || size[2] < m){
+  ggplot(x = c(1), y = c(1)) + theme(panel.background = element_rect(fill = "black"), plot.background = element_rect(fill = "black"))
+}else{
+  
+  # this is going to figure out the nice "chunk size"
+  (sq <-  floor(min(c(nr/m, nc/m))))
+  # recalculates output m, n (will "crop" original image)
+  # extra left or bottom rows may be unused
+  (m <- floor(nr/sq))
+  (n <- floor(nc/sq))
+  
+  pix <- matrix(0, nrow = m, ncol = n)
+  for(i in 1:(m)){
+    for(j in 1:(n)){
+      ## chunk boundaries
+      ## print(c( range(1:sq + (i-1)*sq), range(1:sq + (j-1)*sq)))
+      pix[i, j] = mean(flower[1:sq + (i-1)*sq, 1:sq + (j-1)*sq])
+    }
+  }
+  par(mar = rep(0, 4))
+
+  pix <- fliplr(pix)
+  
+  dat2 <-
+  pix %>%
+  as_tibble() %>%
+  rownames_to_column("Var1") %>%
+  pivot_longer(-Var1, names_to = "Var2", values_to = "value") %>%
+  mutate(
+    Var1 = factor(Var1, levels = 1:m),
+    Var2 = factor(gsub("V", "", Var2), levels = 1:n)
+  )
+#> Warning: The `x` argument of `as_tibble.matrix()` must have unique column names if
+#> `.name_repair` is omitted as of tibble 2.0.0.
+#> ℹ Using compatibility `.name_repair`.
+
+ggplot(dat2, aes(Var1, Var2)) +
+  geom_tile(aes(fill = value)) +
+  scale_fill_gradient(low = "black", high = "white") + 
+  #coord_radial(inner.radius = 0.3, r_axis_inside = F) +
+  theme_void() +
+  theme(legend.position = "none") +
+  labs(x = "", y = "") 
+}
+}
+## defaults to 8x12 (or is it 12x8?)
+  
+#pixel("~/Documents/website_project/picture1.jpeg", m = 20)
+  
+
+output$pixelplot <- renderPlot({
+  req(input$image_upload_flower)
+  pixel(input$image_upload_flower$datapath, input$m)
+})
+```
+
+# Line-ify
+## Sidebar {.sidebar}
+
+```{r}
+#| component: input
+fileInput(
+  "image_upload", ## This is the name of the imput. I call this when getting more info from the submission. 
+  "Pick an Image to Line-ify", ## this is the title above the input button
+  accept = c('image/png', 'image/jpeg') ## this specifies the different file types that are accepted
+)
+  
+sliderInput("probability", "Choose a prbability for the line image", min = 0.01, max = 0.45, value = 0.1)
+  
+downloadButton("download2")
+
+```
+
+## Column 1
+### Row 1
+```{r}
+  
+imageOutput("image_upload", height = "100%", width = "100%") ## This displays the original image and the height and width doesn't really matter. I was trying to get it to fill the full space, but it didn't work.
+  
+```
+## Column 2
+### Row 1
+```{r}
+plotOutput("lineplot") ## this actually outputs the line plot
+  
+```
+
+```{r}
+#| context: server
+
+output$download2 <- downloadHandler(
+  #req(input$image_upload)
+  filename = "LineImage.png",
+  content = function(file) {
+  ggsave(file, linePic(input$image_upload$datapath, input$probability))
+})
+```
+
+```{r}
+#| context: server
+
+output$image_upload <- renderImage({
+  req(input$image_upload) ## saying it need to wait for the submitting. Pretty sure.
+  list(src = input$image_upload$datapath, contentType = input$image_upload$type, width = "100%") ## this is what is stored from the renderImage function
+}, deleteFile = FALSE) ## this keeps the uploaded file around
+```
+
+```{r}
+#| context: server
+
+library(imager)
+library(pracma)
+library(reshape2)
+library(TSP)
+library(ggplot2)
+  
+linePic <- function(flpath, prob){
+
+img <- load.image(flpath) ## I used the imagr package to load this
+
+img <- grayscale(img)
+
+img <- fliplr(as.matrix(img)) ## it came in backwards so I used the row flip function from pracma
+
+blwhite <- ifelse(img < 0.9, 0, 1) ## This makes the values either 1 or 0 based on whether they are white or black
+
+bw <- melt(blwhite) ## this makes the matrix long
+
+bw$p <- ifelse(bw$value == 1, 0, prob) ## This kinda sets the probability for choosing a black or white pixel
+
+#bw$p <- 1 - bw$value ## takes the complement of all of the other 
+
+bw$tsp <- rbinom(nrow(bw), size = 1, prob = bw$p) ## chooses which black pixels to use
+
+dots <- bw[bw$tsp == 1, ]
+
+dots_mat <- as.matrix(dots[ ,c(1, 2)])
+dist_mat <- dist(dots_mat)
+
+tsp <- TSP(dist_mat)
+
+route <- solve_TSP(tsp, method = "nearest_insertion")
+
+path <- as.integer(route)
+
+# plot(dots_mat, pch = 16, cex = 0.1, asp = 1, axes = F, ylab =  "", xlab = " ")
+# lines(dots_mat[path, ], col = "black")
+
+ggplot() +
+  geom_point(data = dots_mat, aes(x = dots_mat[ ,1], y = dots_mat[ ,2]), size = 0.1) +
+  geom_path(data = dots_mat[path, ], aes(x = dots_mat[path ,1], y = dots_mat[path ,2]), color = "black") +
+  #coord_fixed() +
+  #theme(panel.background = element_rect(fill = "black")) +
+  theme_void() + 
+  labs(x = "", y = "")
+
+}
+
+#linePic("~/Documents/website_project/peng.png", .2)
+
+output$lineplot <- renderPlot({
+  req(input$image_upload)
+  linePic(input$image_upload$datapath, input$probability)
+})
+
+```
+
+# Text-ify
+## Sidebar {.sidebar}
+
+```{r}
+#| component: input
+fileInput(
+  "image_upload_text", ## This is the name of the imput. I call this when getting more info from the submission. 
+  "Pick an Image to text-ify", ## this is the title above the input button
+  accept = c('image/png', 'image/jpeg') ## this specifies the different file types that are accepted
+)
+sliderInput("m_row", "Choose the number of rows", min = 1, max = 500, value = 12)
+  
+#sliderInput("n_col", "Choose the number of columns", min = 1, max = 500, value = 8)  
+  
+downloadButton("download1")
+```
+
+## Column 1
+### Row 1
+```{r}
+  
+imageOutput("image_upload_text") ## This displays the original image and the height and width doesn't really matter. I was trying to get it to fill the full space, but it didn't work.
+  
+```
+
+```{r}
+#| context: server
+
+   
+output$download1 <- downloadHandler(
+  #req(input$download1),
+  filename = "textImage.txt",
+  content = function(file) {
+
+  textoutout <- capture.output({
+    text_maker(input$image_upload_text$datapath, input$m_row)
+  })
+    print(textoutout)
+    writeLines(textoutout, file)
+  }
+)
+```
+
+## Column 2
+### Row 1
+```{r}
+verbatimTextOutput("textplot", placeholder = TRUE) ## this actually outputs the line plot
+```
+
+```{r}
+#| context: server
+
+output$image_upload_text <- renderImage({
+  req(input$image_upload_text) ## saying it need to wait for the submitting. Pretty sure.
+  list(src = input$image_upload_text$datapath, contentType = input$image_upload_Text$type, width = "100%") ## this is what is stored from the renderImage function
+}, deleteFile = FALSE) ## this keeps the uploaded file around
+```
+
+```{r}
+#| context: server
+
+text_maker <- function(flpath_flower, m = 8){
+  flower <- load.image(flpath_flower)
+  flower <- grayscale(flower)
+  flower <- as.matrix(flower, byrow = T)
+  (nr <- nrow(flower))
+  (nc <- ncol(flower))
+
+size <- dim(flower)
+
+if(size[1] < m || size[2] < m){
+print("Sowwy too big dims")
+}else{
+  
+  # this is going to figure out the nice "chunk size"
+  (sq <-  floor(min(c(nr/m, nc/m))))
+  # recalculates output m, n (will "crop" original image)
+  # extra left or bottom rows may be unused
+  (m <- floor(nr/sq))
+  (n <- floor(nc/sq))
+  
+  pix <- matrix(0, nrow = m, ncol = n)
+  for(i in 1:(m)){
+    for(j in 1:(n)){
+      ## chunk boundaries
+      ## print(c( range(1:sq + (i-1)*sq), range(1:sq + (j-1)*sq)))
+      pix[i, j] = mean(flower[1:sq + (i-1)*sq, 1:sq + (j-1)*sq])
+    }
+  }
+  text_list <- c(rep(0, m * n))
+  count <- 1
+  for(k in pix){
+    if(k < 0.09){
+      text_list[count] <- " "
+      count = count + 1
+    }
+    else if(0.09 <= k && k < 0.19){
+      text_list[count] <- "."
+      count = count + 1
+    }
+    else if(0.19 <= k && k < 0.29){
+      text_list[count] <- ":"
+      count = count + 1
+    }
+    else if(0.29 <= k && k < 0.39){
+      text_list[count] <- "-"
+      count = count + 1
+    }
+    else if(0.39 <= k && k < 0.49){
+      text_list[count] <- "="
+      count = count + 1
+    }
+    else if(0.49 <= k && k < 0.59){
+      text_list[count] <- "+"
+      count = count + 1
+    }
+    else if(0.59 <= k && k < 0.69){
+      text_list[count] <- "*"
+      count = count + 1
+    }
+    else if(0.69 <= k && k < 0.79){
+      text_list[count] <- "%"
+      count = count + 1
+    }
+    else if(0.79 <= k && k < 0.89){
+      text_list[count] <- "#"
+      count = count + 1
+    }
+    else{
+      text_list[count] <- "@"
+      count = count + 1
+    }
+  }
+  for(q in 0:(m - 1)){
+    cat(text_list[(1 + q*n):(n + q*n)], sep = " ", "\n") 
+  }
+  #par(mar = rep(0, 4))
+  #image(pix, col = gray.colors(256), axes = F, asp = m/n, ylim = c(1, 0))
+}
+}
+
+output$textplot <- renderPrint({
+  req(input$image_upload_text)
+  text_maker(input$image_upload_text$datapath, input$m_row)
+})
+
+```
+
+# Dot-ify
+## Sidebar {.sidebar}
+
+```{r}
+#| component: input
+fileInput(
+  "image_upload_2", ## This is the name of the imput. I call this when getting more info from the submission. 
+  "Pick an Image to Line-ify", ## this is the title above the input button
+  accept = c('image/png', 'image/jpeg') ## this specifies the different file types that are accepted
+)
+  
+sliderInput("dot_prob", "choose a probability", min = 0.01, max = 0.2, value = 0.05)
+
+  
+#sliderInput("probability", "Choose a prbability for the line image", min = 0.01, max = 0.45, value = 0.1)
+  
+downloadButton("download4")
+
+```
+
+## Column 1
+### Row 1
+```{r}
+  
+imageOutput("image_upload_2", height = "100%", width = "100%") ## This displays the original image and the height and width doesn't really matter. I was trying to get it to fill the full space, but it didn't work.
+  
+```
+## Column 2
+### Row 1
+```{r}
+plotOutput("dotplot") ## this actually outputs the line plot
+  
+```
+
+```{r}
+#| context: server
+
+output$download4 <- downloadHandler(
+  #req(input$image_upload)
+  filename = "DotImage.png",
+  content = function(file) {
+  ggsave(file, dotPic(input$image_upload_2$datapath, input$dot_prob))
+})
+```
+
+```{r}
+#| context: server
+
+output$image_upload_2 <- renderImage({
+  req(input$image_upload_2) ## saying it need to wait for the submitting. Pretty sure.
+  list(src = input$image_upload_2$datapath, contentType = input$image_upload_2$type, width = "100%") ## this is what is stored from the renderImage function
+}, deleteFile = FALSE) ## this keeps the uploaded file around
+```
+
+```{r}
+#| context: server
+
+library(imager)
+library(pracma)
+library(reshape2)
+library(ggplot2)
+library(caret)
+  
+dotPic <- function(flpath, probp){
+
+flower <- load.image(flpath) ## I used the imagr package to load this
+
+flower <- resize(flower, size_x = 300, size_y = 200)
+
+img <- grayscale(flower)
+
+img <- fliplr(as.matrix(img))
+
+#img <- flipud(as.matrix(img))
+
+redp <- flower[,, 1, 1]
+greenp <- flower[,, 1, 2]
+bluep <- flower[,, 1, 3]
+
+rp <- melt(redp)[ ,3]
+gp <- melt(greenp)[ ,3]
+bp <- melt(bluep)[ ,3]
+
+bw <- melt(img)
+
+bw <- cbind(bw, rp, gp, bp)
+
+PartitionIdex <- createDataPartition(bw[ ,1], p = probp, list = FALSE)
+bw <- bw[PartitionIdex, ]
+
+ggplot() + 
+  geom_point(data = bw, aes(x = Var1, y = Var2), color = rgb(bw[ ,4], bw[ ,5], bw[ ,6]), size = bw[ ,3]*25) +
+  theme_void() + scale_y_reverse()
+
+}
+
+#linePic("~/Documents/website_project/peng.png", .2)
+
+output$dotplot <- renderPlot({
+  req(input$image_upload_2)
+  dotPic(input$image_upload_2$datapath, input$dot_prob)
+})
+
+```
+
